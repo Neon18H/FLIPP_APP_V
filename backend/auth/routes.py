@@ -26,3 +26,34 @@ def seed_owner():
     u = create_user(payload.get("first_name","Sara"), payload.get("last_name","Owner"),
                     payload.get("email","owner@example.com"), payload.get("password","owner123"), role="owner")
     return {"user": user_out.dump(u)}, 201
+
+
+from utils.auth import role_required
+from auth.schemas import RegisterSchema
+
+register_schema = RegisterSchema()
+
+@bp.post("/register")
+@role_required("owner")  # Solo el Owner puede registrar usuarios
+def register_user():
+    from sqlalchemy.exc import IntegrityError
+    from auth.service import create_user
+
+    try:
+        payload = register_schema.load(request.get_json() or {})
+    except ValidationError as e:
+        return {"errors": e.messages}, 400
+
+    try:
+        u = create_user(
+            first_name=payload["first_name"],
+            last_name=payload["last_name"],
+            email=payload["email"],
+            password=payload["password"],
+            role=payload.get("role", "assistant"),
+        )
+    except IntegrityError:
+        # email único
+        return {"error": "email_already_exists"}, 409
+
+    return {"message": "user_created", "user": UserOut().dump(u)}, 201
